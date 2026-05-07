@@ -23,17 +23,29 @@ async function aQuery(api, chain = 'aptos') {
 
 async function getResources(account, chain = 'aptos') {
   const data = []
-  let lastData
   let cursor
+  let pageLen = 0
+
   do {
     let url = `${endpointMap[chain]()}/v1/accounts/${account}/resources?limit=9999`
     if (cursor) url += '&start=' + cursor
     const res = await http.getWithMetadata(url)
-    lastData = res.data
-    data.push(...lastData)
-    sdk.log('fetched resource length', lastData.length)
+
+    const page = Array.isArray(res?.data)
+      ? res.data
+      : Array.isArray(res?.data?.resources)
+        ? res.data.resources
+        : Array.isArray(res?.data?.data)
+          ? res.data.data
+          : Array.isArray(res?.data?.items)
+            ? res.data.items
+            : []
+
+    data.push(...page)
+    pageLen = page.length
+    sdk.log('fetched resource length', pageLen)
     cursor = res.headers['x-aptos-cursor']
-  } while (lastData.length === 9999)
+  } while (pageLen === 9999 && cursor)
   return data
 }
 
@@ -216,16 +228,6 @@ const timestampToVersion = async (timestamp, minBlock = 0, chain = 'aptos') => {
   return mappedBlocks[0].version;
 }
 
-async function functionViewWithApiKey({ functionStr, type_arguments = [], args = [], ledgerVersion = undefined, apiKey = undefined, chain = 'aptos' }) {
-  let path = `${endpointMap[chain]()}/v1/view`
-  if (ledgerVersion !== undefined) path += `?ledger_version=${ledgerVersion}`
-  const headers = {
-    "Authorization": "Bearer " + apiKey
-  }
-  const response = await http.post(path, { "function": functionStr, "type_arguments": type_arguments, arguments: args }, {headers: headers})
-  return response.length === 1 ? response[0] : response
-}
-
 module.exports = {
   endpoint: endpoint(),
   endpointMap,
@@ -239,6 +241,5 @@ module.exports = {
   getTableData,
   function_view,
   hexToString,
-  timestampToVersion,
-  functionViewWithApiKey
+  timestampToVersion
 };
